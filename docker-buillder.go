@@ -3,13 +3,29 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"github.com/BurntSushi/toml"
 )
 
-const listener_port int = 9001
-const interface_port int = 8080
+type Configuration struct {
+	Title string
+	Ports ports `toml:"ports"`
+}
+
+type ports struct {
+	webHook	int
+	ui	int
+}
 
 func main() {
-	fmt.Println("automated docker builds")
-	fmt.Println("webhook listener listens on port: " + strconv.Itoa(listener_port));
-	fmt.Println("interface listens on port: " + strconv.Itoa(interface_port));
+
+	var config Configuration
+
+	if _, err := toml.DecodeFile("config.toml", &config); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(config.Title)
+	fmt.Println("webhook listener listens on port: " + strconv.Itoa(config.Ports.webHook));
+	fmt.Println("interface listens on port: " + strconv.Itoa(config.Ports.ui));
 }

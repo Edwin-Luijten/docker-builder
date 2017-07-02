@@ -1,0 +1,5 @@
+title = "Docker builder"
+
+[ports]
+ui = 8080
+webHook = 9001
