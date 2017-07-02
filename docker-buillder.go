@@ -8,12 +8,12 @@ import (
 
 type Configuration struct {
 	Title string
-	Ports ports `toml:"ports"`
+	Ports ports
 }
 
 type ports struct {
-	webHook	int
-	ui	int
+	updates	int
+	ui		int
 }
 
 func main() {
@@ -26,6 +26,6 @@ func main() {
 	}
 
 	fmt.Println(config.Title)
-	fmt.Println("webhook listener listens on port: " + strconv.Itoa(config.Ports.webHook));
+	fmt.Println("webhook listener listens on port: " + strconv.Itoa(config.Ports.updates));
 	fmt.Println("interface listens on port: " + strconv.Itoa(config.Ports.ui));
 }
