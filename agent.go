@@ -14,9 +14,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"time"
+	rand2 "math/rand"
 
 	"github.com/go-fsnotify/fsnotify"
-	rand2 "math/rand"
 )
 
 var watcher *fsnotify.Watcher
@@ -119,19 +119,18 @@ func watchDir(path string, fi os.FileInfo, err error) error {
 }
 
 func runBuild(dir string, address string, identifier string) {
-	runCommand("docker", []string{"build", "."}, dir)
-	sendMessage(createMessage(identifier, "build-end", dir, string(out.Bytes()), string(stderr.Bytes())), address)
+	runCommand("docker", []string{"build", "."}, dir, address, identifier)
 
 	if autoTag {
-		runCommand("docker", []string{"tag", "id", "repo:tag"}, dir)
+		runCommand("docker", []string{"tag", "id", "repo:tag"}, dir, address, identifier)
 	}
 
 	if autoPush {
-		runCommand("docker", []string{"push", "repo:tag"}, dir)
+		runCommand("docker", []string{"push", "repo:tag"}, dir, address, identifier)
 	}
 }
 
-func runCommand(command string, arguments []string, workingDir string) {
+func runCommand(command string, arguments []string, workingDir string, address string, identifier string) {
 	cmd := exec.Command(command, arguments...)
 	cmd.Dir = workingDir
 
@@ -149,6 +148,8 @@ func runCommand(command string, arguments []string, workingDir string) {
 
 	printError(err, stderr)
 	printOutput(out.Bytes())
+
+	sendMessage(createMessage(identifier, "build-end", workingDir, string(out.Bytes()), string(stderr.Bytes())), address)
 }
 
 func sendMessage(message []byte, address string) {
