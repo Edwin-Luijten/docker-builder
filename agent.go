@@ -21,6 +21,8 @@ import (
 
 var watcher *fsnotify.Watcher
 var rand *rand2.Rand
+var autoTag bool
+var autoPush bool
 
 type BuilderConfig struct {
 	Files []string
@@ -38,13 +40,18 @@ func main() {
 	rand = rand2.New(rand2.NewSource(time.Now().UnixNano()))
 
 	libraryPath := flag.String("path", "./library/", "The folder of your Docker projects")
-	updatesServer := flag.String("server", "192.168.33.1", "The server to send updates to")
-	updatesPort := flag.Int("port", 9001, "The port to send updates to")
+	updatesServer := flag.String("server.address", "192.168.33.1", "The server to send updates to")
+	updatesPort := flag.Int("server.port", 9001, "The port to send updates to")
 	identifier := flag.String("id", randomString(10), "A name which identifies this agent")
+	tag := flag.Bool("auto.tag", false, "Tag the image automatically")
+	push := flag.Bool("auto.push", false, "Push the image automatically")
 
 	flag.Parse()
 
 	address := *updatesServer + ":" + strconv.Itoa(*updatesPort)
+
+	autoTag = *tag
+	autoPush = *push
 
 	log.Printf("Watching: %v", *libraryPath)
 	log.Printf("Sending updates to: %[1]v as %[2]v", address, *identifier)
@@ -112,12 +119,21 @@ func watchDir(path string, fi os.FileInfo, err error) error {
 }
 
 func runBuild(dir string, address string, identifier string) {
-	// Build docker command
-	cmdName := "docker"
-	cmdArgs := []string{"build", "."}
+	runCommand("docker", []string{"build", "."}, dir)
+	sendMessage(createMessage(identifier, "build-end", dir, string(out.Bytes()), string(stderr.Bytes())), address)
 
-	cmd := exec.Command(cmdName, cmdArgs...)
-	cmd.Dir = dir
+	if autoTag {
+		runCommand("docker", []string{"tag", "id", "repo:tag"}, dir)
+	}
+
+	if autoPush {
+		runCommand("docker", []string{"push", "repo:tag"}, dir)
+	}
+}
+
+func runCommand(command string, arguments []string, workingDir string) {
+	cmd := exec.Command(command, arguments...)
+	cmd.Dir = workingDir
 
 	// Collect output
 	out := &bytes.Buffer{}
@@ -133,8 +149,6 @@ func runBuild(dir string, address string, identifier string) {
 
 	printError(err, stderr)
 	printOutput(out.Bytes())
-
-	sendMessage(createMessage(identifier, "build-end", dir, string(out.Bytes()), string(stderr.Bytes())), address)
 }
 
 func sendMessage(message []byte, address string) {

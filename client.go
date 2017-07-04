@@ -69,22 +69,22 @@ func handleRequest(conn net.Conn) {
 
 func getIp() (string) {
 
-	addrs, err := net.InterfaceAddrs()
+	address, err := net.InterfaceAddrs()
 	if err != nil {
 		os.Stderr.WriteString("Oops: " + err.Error() + "\n")
 		os.Exit(1)
 	}
 
-	var address string
+	var ip string
 
-	for _, a := range addrs {
+	for _, a := range address {
 
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
-				address = ipnet.IP.String()
+				ip = ipnet.IP.String()
 			}
 		}
 	}
 
-	return address
+	return ip
 }
