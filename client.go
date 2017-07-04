@@ -1,139 +1,90 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"os/exec"
-	"bytes"
-	"log"
-	"flag"
-	"strings"
-
-	"github.com/go-fsnotify/fsnotify"
 	"net"
+	"os"
+	"flag"
+	"log"
 	"strconv"
-	"bufio"
 	"encoding/json"
 )
 
-var watcher *fsnotify.Watcher
+type messageTemplate struct {
+	Identifier string
+	Type       string
+	Job        string
+	Message    string
+	Error      string
+}
 
 func main() {
-	libraryPath := flag.String("path", "./library/", "The folder of your Docker projects")
-	updatesServer := flag.String("server", "192.168.33.1", "The server to send updates to")
 	updatesPort := flag.Int("port", 9001, "The port to send updates to")
 
-	flag.Parse()
+	address := getIp() + ":" + strconv.Itoa(*updatesPort)
 
-	address := *updatesServer + ":" + strconv.Itoa(*updatesPort)
+	listener, err := net.Listen("tcp", address)
 
-	log.Printf("Watching: %v", *libraryPath)
-	log.Printf("Sending updates to: %v", address)
-
-	watcher, _ = fsnotify.NewWatcher();
-	defer watcher.Close()
-
-	if err := filepath.Walk(*libraryPath, watchDir); err != nil {
-		fmt.Println("ERROR", err)
+	if err != nil {
+		log.Fatal("Error listening on:" + address)
 	}
 
-	done := make(chan bool)
+	defer listener.Close()
 
-	go func() {
-		for {
-			select {
-			case event := <-watcher.Events:
-				if event.Op&fsnotify.Write == fsnotify.Write {
+	log.Println("Listening on: " + address)
 
-					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-						fmt.Println(event.Name)
-						runBuild(event, address)
-					}
-				}
-			case err := <-watcher.Errors:
-				fmt.Println("ERROR", err)
+	for {
+		conn, err := listener.Accept()
+
+		if err != nil {
+			log.Fatal("Error accepting: ", err.Error())
+		}
+
+		go handleRequest(conn)
+	}
+}
+
+func handleRequest(conn net.Conn) {
+	request := json.NewDecoder(conn)
+
+	var message messageTemplate
+
+	// Send back a response
+	conn.Write([]byte("Update received"))
+
+	// Decode json to object
+	err := request.Decode(&message)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("Identifier", message.Identifier)
+	log.Println("Type: " + message.Type)
+	log.Println("Job: " + message.Job)
+	log.Println("Message: " + message.Message)
+	log.Println("Error: " + message.Error)
+
+	conn.Close()
+}
+
+func getIp() (string) {
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		os.Stderr.WriteString("Oops: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
+	var address string
+
+	for _, a := range addrs {
+
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				address = ipnet.IP.String()
 			}
 		}
-	}()
-
-	<-done
-}
-
-func watchDir(path string, fi os.FileInfo, err error) error {
-
-	// since fsnotify can watch all the files in a directory, watchers only need
-	// to be added to each nested directory
-	if fi.Mode().IsDir() {
-		return watcher.Add(path)
 	}
 
-	return nil
-}
-
-func runBuild(event fsnotify.Event, address string) {
-	conn, _ := net.Dial("tcp", address)
-
-	// Build docker command
-	cmdName := "docker"
-	cmdArgs := []string{"build", "."}
-
-	cmd := exec.Command(cmdName, cmdArgs...)
-	cmd.Dir = event.Name
-
-	// Collect output
-	out := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	cmd.Stdout = out
-	cmd.Stderr = stderr
-
-	printCommand(cmd)
-
-	// Run command
-	err := cmd.Run()
-
-	printError(err, stderr)
-	printOutput(out.Bytes())
-
-	// Send data to server
-	type messageTemplate struct {
-		Job string
-		Message string
-		Error string
-	}
-
-	message := messageTemplate{
-		Job: event.Name,
-		Message: string(out.Bytes()),
-		Error: string(stderr.Bytes()),
-	}
-
-	b, err := json.Marshal(message)
-
-	if err != nil {
-		log.Fatal("error: ", err)
-	}
-
-	conn.Write(b)
-
-	response, _ := bufio.NewReader(conn).ReadString('\n')
-
-	fmt.Println(string(response))
-}
-
-func printCommand(cmd *exec.Cmd) {
-	fmt.Printf("==> Executing: %s\n", strings.Join(cmd.Args, " "))
-}
-
-func printError(err error, stderr *bytes.Buffer) {
-	if err != nil {
-		os.Stderr.WriteString(fmt.Sprintf("==> Error: %s\n %s\n", err.Error(), stderr.String()))
-	}
-}
-
-func printOutput(outs []byte) {
-	if len(outs) > 0 {
-		fmt.Printf("==> Output: %s\n", string(outs))
-	}
+	return address
 }

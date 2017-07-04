@@ -1,5 +1,0 @@
-title = "Docker builder"
-
-[ports]
-ui = 8080
-updates = 9001
